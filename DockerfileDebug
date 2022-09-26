@@ -28,7 +28,7 @@ RUN cd raptoreum/depends && \
     make -j10 && \
     cd .. && \
     ./autogen.sh && \
-    ./configure --prefix=`pwd`/depends/x86_64-pc-linux-gnu --disable-tests --without-gui && \
+    ./configure --prefix=`pwd`/depends/x86_64-pc-linux-gnu --disable-tests --without-gui --enable-debug && \
     make -j10 && \
     cp src/raptoreum-cli src/raptoreum-tx src/raptoreumd /usr/local/bin
 
@@ -45,4 +45,4 @@ EXPOSE 10226
 # Use healthcheck to deal with hanging issues and prevent pose bans
 HEALTHCHECK --start-period=10m --interval=15m --retries=3 --timeout=10s \
   CMD check.sh
-CMD ["start.sh"]
+CMD start.sh

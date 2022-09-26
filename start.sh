@@ -5,70 +5,56 @@ DIR='/raptoreum/.raptoreumcore'
 CONF_FILE='raptoreum.conf'
 FILE=$DIR/$CONF_FILE
 
-
-# Create directory and config file if it does not exist yet
-if [ ! -e "$FILE" ]; then
-  mkdir -p $DIR
-  if [ -n "$BLS_KEY" ]; then
-    cat << EOF > $FILE
-rpcuser=$(pwgen -1 8 -n)
-rpcpassword=$(pwgen -1 20 -n)
-rpcallowip=127.0.0.1
-rpcbind=127.0.0.1
-server=1
-listen=1
-par=2
-dbcache=1024
-smartnodeblsprivkey=${BLS_KEY}
-externalip=${EXTERNALIP}
-addnode=explorer.raptoreum.com
-addnode=raptor.mopsus.com
-addnode=209.151.150.72
-addnode=94.237.79.27
-addnode=95.111.216.12
-addnode=198.100.149.124
-addnode=198.100.146.111
-addnode=5.135.187.46
-addnode=5.135.179.95
-EOF
+graceful_shutdown() {
+  echo "Container is shutting down. gracefully shutting down raptoreum core daemon"
+  raptoreum-cli --conf=$FILE stop
+  exit_code=$?
+  sleep 30s
+  killall -q -w -s SIGINT raptoreumd
+  # Check for any core files
+  CoreCount=$(find . -name core | wc -l)
+  if [ $CoreCount != 0 ] ; then
+     echo "Core file: ${CoreFile} - generating stacktrace"
+     CoreFile=$(find . -name core -print -quit)
+     CURRENT_DATE = `date +%s`
+     cp $CoreFile /raptoreum/.raptoreumcore/core_${CURRENT_DATE}
   else
-    cat << EOF > $FILE
-rpcuser=$(pwgen -1 8 -n)
-rpcpassword=$(pwgen -1 20 -n)
-rpcallowip=127.0.0.1
-rpcbind=127.0.0.1
-server=1
-listen=1
-addnode=explorer.raptoreum.com
-addnode=raptor.mopsus.com
-addnode=209.151.150.72
-addnode=94.237.79.27
-addnode=95.111.216.12
-addnode=198.100.149.124
-addnode=198.100.146.111
-addnode=5.135.187.46
-addnode=5.135.179.95
-EOF
+    echo "raptoreum core shutdown successfully"
+  fi
+
+  kill -TERM "$child" 2>/dev/null
+}
+
+
+if [[ "$FORCE_BOOTSTRAP" == "true" ]]; then
+  if [ -d $DIR ]; then
+    rm -rf $DIR
   fi
 fi
 
-# Create script for HEALTHCHECK
-if [ ! -e /usr/local/bin/healthcheck.sh ]; then
-  touch healthcheck.sh
-  cat << EOF > healthcheck.sh
-#!/bin/bash
-
-POSE_SCORE=\$(curl -s "https://explorer.raptoreum.com/api/protx?command=info&protxhash=${PROTX_HASH}" | jq -r '.state.PoSePenalty')
-if ((POSE_SCORE>0)); then
-  kill -15 -1
-  sleep 15
-  kill -9 -1
-else
-  echo "Smartnode seems to be healthy..."
-fi
-EOF
-  chmod 755 healthcheck.sh
-  mv healthcheck.sh /usr/local/bin
+if [ -n "$CONF" ]; then
+  if [ -e "$FILE" ]; then
+    rm $FILE
+  fi
 fi
 
-exec $EXECUTABLE -datadir=$DIR -conf=$FILE
+# Create directory and config file if it does not exist yet
+if [ ! -e "$FILE" ]; then
+  bootstrap.sh
+  if [ -n "$CONF" ]; then
+    echo "${CONF}" >> $FILE
+  fi
+fi
+
+if [ -n "$OPEN_FILE_LIMIT" ]; then
+  OPEN_FILE_LIMIT=65000
+fi
+
+ulimit -c unlimited
+ulimit -n $OPEN_FILE_LIMIT
+
+trap graceful_shutdown 1 2 3 4 5 6 9 15
+$EXECUTABLE -datadir=$DIR -conf=$FILE &
+child=$!
+echo "waiting for process $child to be killed"
+wait $child

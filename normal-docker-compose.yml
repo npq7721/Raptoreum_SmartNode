@@ -1,0 +1,31 @@
+version: '3.2'
+
+services:
+  raptoreum:
+    image: npq7721/raptoreum:1.13.17.01
+    container_name: normal_raptoreum_node
+    ports:
+      - "10226:10226"
+    volumes:
+      - /home/tri/workspace/test/:/raptoreum
+    restart: unless-stopped
+    environment:
+      BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps_for_v1.3.17.00/bootstrap.tar.xz"
+      FORCE_BOOTSTRAP: "false"
+      OPEN_FILE_LIMIT: 66000
+      CONF: |
+        rpcuser=rpcuser
+        rpcpassword=rpcpassword
+        rpcallowip=127.0.0.1
+        rpcbind=127.0.0.1
+        server=1
+        listen=1
+        addnode=209.151.150.72
+        addnode=94.237.79.27
+        addnode=95.111.216.12
+        addnode=198.100.149.124
+        addnode=198.100.146.111
+        addnode=5.135.187.46
+        addnode=5.135.179.95
+        addnode=139.59.7.178
+        addnode=167.172.60.177
