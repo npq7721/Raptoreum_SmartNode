@@ -1,9 +1,9 @@
   #!/bin/bash
   # URLs for raptoreum explorers. Main and backup one.
-  URL=( 'https://explorer.raptoreum.com/' 'https://raptor.mopsus.com/' )
+  URL=( 'https://explorer.raptoreum.com/' 'https://explorer.louhintamestarit.fi/' )
   URL_ID=0
 
-  BOOTSTRAP_TAR='https://bootstrap.raptoreum.com/bootstrap.tar.xz'
+  BOOTSTRAP_TAR=$BOOTSTRAP
 
   POSE_SCORE=0
   PREV_SCORE=0
