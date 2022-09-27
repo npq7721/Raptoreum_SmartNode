@@ -8,7 +8,6 @@ FILE=$DIR/$CONF_FILE
 graceful_shutdown() {
   echo "Container is shutting down. gracefully shutting down raptoreum core daemon"
   raptoreum-cli --conf=$FILE stop
-  exit_code=$?
   sleep 30s
   killall -q -w -s SIGINT raptoreumd
   # Check for any core files

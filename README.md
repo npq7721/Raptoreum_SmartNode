@@ -1,9 +1,9 @@
 # Raptoreum SmartNode
 Script needs to be ran under a sudo user and not under root. It will install binaries, configure basic firewall settings, and create a daemon service for you. It also has a bootstrap option for quick syncing and option to create a Cron job that will check on daemon's health every hour.  
 
-> ℹ Note: This has only been tested on a VPS using Ubuntu 18. USE AT OWN RISK.
+> ℹ Note: This has only been tested on a VPS using Ubuntu 20. USE AT OWN RISK.
 
-## Installation
+## Installation without Docker
 Create a sudo user and run this under that sudo user. Script will exit if logged in as root.  
 Script will ask for BLS PrivKey(operatorSecret) that you get from the protx quick_setup/bls generate command. So have it ready.  
 If opting to have script create Cron job you will need the protx hash you got from the protx quick_setup.  
@@ -13,10 +13,10 @@ bash <(curl -s https://raw.githubusercontent.com/dk808/Raptoreum_Smartnode/main/
 ```
 > ℹ Info: This will also create a script to update binaries.
 ***
-## Docker Usage
+## Installation using Docker
 Install docker if you don't have it installed on the server. Execute everything below as one command while logged in as root.
 ```bash
-apt-get update && apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common -y && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - && add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" && apt-get update && apt-get install docker-ce docker-ce-cli containerd.io -y
+sudo apt-get update && sudo apt-get install docker docker-compose
 ```
 If planning to run container under user add user to docker group. Replace USER with username you will run container with.
 ```bash
@@ -24,37 +24,123 @@ adduser USER docker
 ```
 Create a directory to use for volume so you have persistent data for the container to use.
 ```bash
-mkdir smartnode
+mkdir docker-rtm
 ```
-Run command below to use the bootstrap for quick syncing. This is optional but highly recommend to use it or it could take a while to sync.  
-Example shown below is using `/root/smartnode` for binding volume. Change it to absolute path of the directory you created in previous step. So if under a user then it should be `/home/USER/smartnode`
-```bash
-docker run \
-  -ti \
-  --rm \
-  -v /root/smartnode:/raptoreum \
-  dk808/rtm-smartnode:latest \
-  bootstrap.sh
-```  
-| ENV VARIABLES |                         DESCRIPTION                         |
-|:-------------:|:-----------------------------------------------------------:|
-|   EXTERNALIP  |                     IP Address of server                    |
-|    BLS_KEY    | Operator Secret Key from ProTx or from bls generate command |
-|   PROTX_HASH  |    ProTx Hash(right click on your smartnode in qt wallet)   |
+Create docker-compose.yml from one of the sample below
 
-The table above shows env variables you will need to use at runtime if you want to run the container as a smartnode.  
-Example shown below to run the container. Please change env variables to your values.
-```bash
-docker run \
-  -d \
-  -p 10226:10226 \
-  --name smartnode \
-  -e EXTERNALIP=149.28.200.164 \
-  -e BLS_KEY=084784f5dc8e01de1926fe7bdfd055916f22eb3823a10adb050fee9457dd483b \
-  -e PROTX_HASH=d32c998e8155265900b590813e0e85ad7998e4f45b03e1ab722ec9be782b8eea \
-  -v /root/smartnode:/raptoreum \
-  --restart=unless-stopped \
-  dk808/rtm-smartnode:latest
-  ```
+### docker-compose.yml for normal node
+```yaml
+version: '3.2'
+
+services:
+  raptoreum:
+    image: npq7721/raptoreum:1.13.17.01
+    container_name: normal_raptoreum_node # name of the container, change it if u want different name
+    ports:
+      - "10226:10226" #map raptoreum core port for peer to peer communication
+    volumes:
+      - /root/docker-rtm/:/raptoreum #maping /root/docker-rtm from host machine to /raptoreum folder in docker container
+    restart: unless-stopped
+    environment:
+      BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps_for_v1.3.17.00/bootstrap.tar.xz" #normal bootstrap
+      FORCE_BOOTSTRAP: "false" # change to true if u want to redownload bootstrap
+      CONF: | #this is raptoreum.conf
+        rpcuser=rpcuser
+        rpcpassword=rpcpassword
+        rpcallowip=127.0.0.1
+        rpcbind=127.0.0.1
+        server=1
+        listen=1
+        externalip=139.59.151.120
+        addnode=209.151.150.72
+        addnode=94.237.79.27
+        addnode=95.111.216.12
+        addnode=198.100.149.124
+        addnode=198.100.146.111
+        addnode=5.135.187.46
+        addnode=5.135.179.95
+        addnode=139.59.7.178
+        addnode=167.172.60.177
+```
+### docker-compose.yml for smartnode
+```yaml
+version: '3.2'
+
+services:
+  raptoreum:
+    image: npq7721/raptoreum:1.13.17.01
+    container_name: smart_raptoreum_node # name of the container, change it if u want different name
+    ports:
+      - "10226:10226" # map raptoreum core port for peer to peer communication
+    volumes:
+      - /root/docker-rtm/:/raptoreum #maping /root/docker-rtm from host machine to /raptoreum folder in docker container
+    restart: unless-stopped
+    environment:
+      BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps_for_v1.3.17.00/bootstrap.tar.xz" #normal bootstrap
+      FORCE_BOOTSTRAP: "false" # change to true if u want to redownload bootstrap
+      PROTX_HASH: #ur smartnode protx hash
+      CONF: | #this is raptoreum.conf
+        rpcuser=rpcuser
+        rpcpassword=rpcpassword
+        rpcallowip=127.0.0.1
+        rpcbind=127.0.0.1
+        server=1
+        listen=1
+        par=2
+        dbcache=1024
+        maxconnections=125
+        smartnodeblsprivkey=put_ur_private_bls_key_here
+        externalip=your_vps_public_ip
+        addnode=209.151.150.72
+        addnode=94.237.79.27
+        addnode=95.111.216.12
+        addnode=198.100.149.124
+        addnode=198.100.146.111
+        addnode=5.135.187.46
+        addnode=5.135.179.95
+        addnode=139.59.7.178
+        addnode=167.172.60.177
+```
+### docker-compose.yml for index node
+```yaml
+version: '3.2'
+
+services:
+  raptoreum:
+    image: npq7721/raptoreum:1.13.17.01
+    container_name: index_raptoreum_node # name of the container, change it if u want different name
+    ports:
+      - "10226:10226" #map raptoreum core port for peer to peer communication
+      - "10420:10420" # this is the same port as rpcport to allow rpc call.
+    volumes:
+      - /root/docker-rtm/:/raptoreum #maping /root/docker-rtm from host machine to /raptoreum folder in docker container
+    restart: unless-stopped
+    environment:
+      BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps_for_v1.3.17.00/bootstrap-index.tar.xz" #index bootstrap
+      FORCE_BOOTSTRAP: "false" # change to true if u want to redownload bootstrap
+      CONF: | #this is raptoreum.conf
+        rpcuser=rpcuser
+        rpcpassword=rpcpassword
+        rpcallowip=127.0.0.1
+        rpcbind=127.0.0.1
+        rpcport=10420
+        server=1
+        listen=1
+        txindex=1
+        addressindex=1
+        futureindex=1
+        spentindex=1
+        timestampindex=1
+        externalip=139.59.151.120
+        addnode=209.151.150.72
+        addnode=94.237.79.27
+        addnode=95.111.216.12
+        addnode=198.100.149.124
+        addnode=198.100.146.111
+        addnode=5.135.187.46
+        addnode=5.135.179.95
+        addnode=139.59.7.178
+        addnode=167.172.60.177
+```
 __Do not forget to open port 10226__  
 > ℹ Info: You could ask support questions in [Raptoreum's Discord](https://discord.gg/wqgcxT3Mgh)

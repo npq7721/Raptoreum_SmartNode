@@ -98,13 +98,13 @@
         POSE_SCORE=$(curl -s "${URL[$URL_ID]}api/protx?command=info&protxhash=${PROTX_HASH}" | jq -r '.state.PoSePenalty')
       fi
       if [[ $POSE_SCORE == "null" ]]; then
-        echo "$(date -u)  Your NODE_PROTX is invalid, please insert your NODE_PROTX hash in line #18 of check.sh script."
+        echo "$(date -u)  Your PROTX_HASH is invalid, please set your PROTX_HASH hash as environment variable."
       elif (( $(GetNumber $POSE_SCORE) == -1 )); then
         echo "$(date -u)  Could not get PoSe score for the node. It is possible both explorers are down."
       fi
       POSE_SCORE=$(GetNumber $POSE_SCORE)
     else
-      echo "$(date -u)  Your NODE_PROTX is empty. Please reinitialize the node again or add it in line #18 of check.sh script."
+      echo "$(date -u)  Your PROTX_HASH is empty. please set your PROTX_HASH hash as environment variable"
     fi
 
     PREV_SCORE=$(ReadValue "/tmp/pose_score")
