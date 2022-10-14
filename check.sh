@@ -1,9 +1,10 @@
-  #!/bin/bash
+#!/bin/bash
   # URLs for raptoreum explorers. Main and backup one.
   URL=( 'https://explorer.raptoreum.com/' 'https://explorer.louhintamestarit.fi/' )
   URL_ID=0
 
   BOOTSTRAP_TAR=$BOOTSTRAP
+  HEALTH_LOG=/raptoreum/logs/healthcheck.log
 
   POSE_SCORE=0
   PREV_SCORE=0
@@ -24,10 +25,7 @@
   fi
 
   if [[ -z $CONFIG_DIR ]]; then
-    if [[ -z $HOME ]]; then
-      HOME="/home/$USER/"
-    fi
-    CONFIG_DIR="$HOME/.raptoreumcore/"
+    CONFIG_DIR="/raptoreum/.raptoreumcore/"
   fi
 
   function GetNumber () {
@@ -36,6 +34,11 @@
     else
       echo "-1"
     fi
+  }
+
+  function log() {
+    echo $@
+    echo $@ >> $HEALTH_LOG
   }
 
   function ReadValue () {
@@ -60,155 +63,139 @@
   }
 
   function forceKillWithCoreFile() {
-    cd CONFIG_DIR
-    CURRENT_DATE = `date +%s`
+    CURRENT_DATE=`date +%s`
     pkill -SIGABRT `cat raptoreumd.pid`
-    cp core core${CURRENT_DATE}
+    cp core /raptoreum/corefiles/core${CURRENT_DATE}
   }
 
   function tryToKillDaemonGracefullyFirst() {
-    echo "$(date -u)  Trying to kill daemon gracefully..."
+    log "$(date -u)  Trying to kill daemon gracefully..."
     pkill raptoreumd
     sleep 90s
     LOCAL_HEIGHT=$(GetNumber "$(ReadCli getblockcount)")
     if (( LOCAL_HEIGHT < 0 )); then
-      echo  "$(date -u)  Unable to kill daemon gracefully, force kill it..."
+      log  "$(date -u)  Unable to kill daemon gracefully, force kill it..."
       forceKillWithCoreFile
     else
-       echo "$(date -u) Daemon has restarted..."
+       log "$(date -u) Daemon has restarted..."
     fi
   }
   function tryTiKillAndGetCoreFile() {
     LOCAL_HEIGHT=$(GetNumber "$(ReadCli getblockcount)")
     if (( LOCAL_HEIGHT < 0 )); then
-      echo  "$(date -u)  It seem to be hang, kill -6"
+      log  "$(date -u)  It seem to be hang, kill -6"
       forceKillWithCoreFile
     else
-       echo "$(date -u) Daemon not hang"
+       log "$(date -u) Daemon not hang"
     fi
   }
 
   function CheckPoSe () {
     # Check if the Node PoSe score is changing.
-    if [[ ! -z ${PROTX_HASH} ]]; then
-      POSE_SCORE=$(curl -s "${URL[$URL_ID]}api/protx?command=info&protxhash=${PROTX_HASH}" | jq -r '.state.PoSePenalty')
-      # Check if the response returned a number or failed.
-      if [[ $(GetNumber $POSE_SCORE) -lt 0 && $POSE_SCORE != "null" ]]; then
-        URL_ID=$(( (URL_ID + 1) % 2 ))
-        POSE_SCORE=$(curl -s "${URL[$URL_ID]}api/protx?command=info&protxhash=${PROTX_HASH}" | jq -r '.state.PoSePenalty')
-      fi
-      if [[ $POSE_SCORE == "null" ]]; then
-        echo "$(date -u)  Your PROTX_HASH is invalid, please set your PROTX_HASH hash as environment variable."
-      elif (( $(GetNumber $POSE_SCORE) == -1 )); then
-        echo "$(date -u)  Could not get PoSe score for the node. It is possible both explorers are down."
-      fi
-      POSE_SCORE=$(GetNumber $POSE_SCORE)
-    else
-      echo "$(date -u)  Your PROTX_HASH is empty. please set your PROTX_HASH hash as environment variable"
-    fi
-
-    PREV_SCORE=$(ReadValue "/tmp/pose_score")
-    echo ${POSE_SCORE} >/tmp/pose_score
-
-    # Check if we should restart raptoreumd according to the PoSe score.
-    if (( POSE_SCORE > 0 )); then
-      if (( POSE_SCORE > PREV_SCORE )); then
-        echo "$(date -u)  Score increased from ${PREV_SCORE} to ${POSE_SCORE}. Send kill signal..."
-        tryTiKillAndGetCoreFile
-        echo "1" >/tmp/was_stuck
-        # Do not check node height after killing raptoreumd it is sure to be stuck.
-        exit
-      elif (( POSE_SCORE < PREV_SCORE )); then
-        echo "$(date -u)  Score decreased from ${PREV_SCORE} to ${POSE_SCORE}. Wait..."
-        rm /tmp/was_stuck 2>/dev/null
-      fi
-      # POSE_SCORE == PREV_SCORE is gonna force check the node block height.
-    fi
-  }
-
-  function CheckBlockHeight () {
-    # Check local block height.
-    NETWORK_HEIGHT=$(GetNumber $(curl -s "${URL[$URL_ID]}api/getblockcount"))
-    if (( NETWORK_HEIGHT < 0 )); then
-      URL_ID=$(( (URL_ID + 1) % 2 ))
-      NETWORK_HEIGHT=$(GetNumber $(curl -s "${URL[$URL_ID]}api/getblockcount"))
-    fi
-    PREV_HEIGHT=$(ReadValue "/tmp/height")
-    LOCAL_HEIGHT=$(GetNumber "$(ReadCli getblockcount)")
-    echo ${LOCAL_HEIGHT} >/tmp/height
-    if [[ $POSE_SCORE -eq $PREV_SCORE || $PREV_SCORE -eq -1 ]]; then
-      echo -n "$(date -u)  Node height (${LOCAL_HEIGHT}/${NETWORK_HEIGHT})."
-      # Block height did not change. Is it stuck?. Compare with netowrk block height. Allow some slippage.
-      if [[ $((NETWORK_HEIGHT - LOCAL_HEIGHT)) -gt 3 || $NETWORK_HEIGHT == -1 ]]; then
-        if (( LOCAL_HEIGHT > PREV_HEIGHT )); then
-          # Node is still syncing?
-          rm /tmp/was_stuck 2>/dev/null
-          echo " Increased from ${PREV_HEIGHT} -> ${LOCAL_HEIGHT}. Wait..."
-        elif [[ $LOCAL_HEIGHT -gt 0 && $(ReadValue "/tmp/was_stuck") -lt 0 ]]; then
-          # Node is behind the network height and it is first attempt at unstucking.
-          # If LOCAL_HEIGHT is >0 it means that we were able to read from the cli
-          # but the height did not change compared to previous check.
-          echo "1" >/tmp/was_stuck
-          echo " Height difference is more than 3 blocks behind the network. Send kill signal..."
-  	    tryTiKillAndGetCoreFile
-        elif [[ $(ReadValue "/tmp/was_stuck") -lt 0 ]]; then
-          # Node was not able to respond. It is probably stuck but try to restart
-          # it once before trying to bootstrap or restore it.
-          echo "1" >/tmp/was_stuck
-          echo " Node was unresponsive for the first time. Send kill signal..."
-  	    tryTiKillAndGetCoreFile
+    if [[ -n ${PROTX_HASH} ]]; then
+      smartnode_status="$(ReadCli smartnode status)"
+      if [[ "$smartnode_status" == "-1" ]]; then
+        log "Daemon take too long to response to get smartnode status. it may be hanging."
+        tryToKillDaemonGracefullyFirst
+        return 1
+      else
+        protx_hash=$(echo $smartnode_status | jq -r ".proTxHash")
+        if [[ "$protx_hash" == "$PROTX_HASH" ]]; then
+          pose_score=$(echo $smartnode_status | jq -r ".dmnState.PoSePenalty")
+          state=$(echo $smartnode_status | jq -r ".state")
+          pose_ban_height=$(echo $smartnode_status | jq -r ".dmnState.PoSeBanHeight")
+          ip=$(echo $smartnode_status | jq -r ".dmnState.service")
+          if (( $pose_ban_height > 0 )); then
+            log "Node currently PoSe banned at height $pose_ban_height. execute the following command on ur core wallet: protx update_service \"$PROTX_HASH\" \"$ip\" \"this node bls private key\"."
+            return 1
+          fi
+          log
+          if (( pose_score > 0 )); then
+            prev_score=$(ReadValue "/tmp/pose_score")
+            echo "${pose_score}" >/tmp/pose_score
+            if (( pose_score > prev_score )); then
+              log "Pose score is increasing check ur node ASAP."
+              return 1
+            fi
+            log "Node got penalize recently and current pose score is $pose_score and decreasing. please check to make sure node working properly."
+            return 0
+          fi
+          if [[ "$state" == "READY" ]]; then
+            log "Node is READY."
+            return 0;
+          fi
         else
-          # Node is most probably very stuck and if trying to sync wrong chain branch.
-          # This meand simple raptoreumd kill will not help and we need to
-          # force unstuck by bootstrapping / resyncing the chain again.
-          echo " Node seems to be hardstuck and is trying to sync forked chain. Try to force unstuck..."
+          log "Protx hash of this node is $protx_hash not matching with PROTX_HASH=$PROTX_HASH. please check PROTX_HASH value"
           return 1
         fi
-      else
-        rm /tmp/was_stuck 2>/dev/null
-        echo " Daemon seems ok..."
       fi
     fi
     return 0
   }
 
-  function BootstrapChain () {
-    echo "$(date -u)  Re-Bootstrap the node chain."
-    echo "0" >/tmp/height
-    echo "0" >/tmp/prev_stuck
+  function networkHeight() {
+    NETWORK_HEIGHT=$(GetNumber $(curl -s "${URL[$URL_ID]}api/getblockcount"))
+    if (( NETWORK_HEIGHT < 0 )); then
+      URL_ID=$(( (URL_ID + 1) % 2 ))
+      NETWORK_HEIGHT=$(GetNumber $(curl -s "${URL[$URL_ID]}api/getblockcount"))
+    fi
+    echo "$NETWORK_HEIGHT"
+  }
 
-    echo "$(date -u)  Download and prepare rtm-bootstrap."
-    rm -rf /tmp/bootstrap 2>/dev/null
-    mkdir -p /tmp/bootstrap 2>/dev/null
-    curl -L "$BOOTSTRAP_TAR" | tar xz -C /tmp/bootstrap/
-
-    # Stop serivce and kill raptoreumd.
-    echo "$(date -u)  Kill raptoreumd."
-    sudo systemctl stop raptoreum
-    pkill -9 raptoreumd 2>/dev/null
-
-    echo "$(date -u)  Clean ${CONFIG_DIR}."
-    rm -rf ${CONFIG_DIR}/{blocks,chainstate,evodb,llmq}
-    echo "$(date -u)  Insert Bootstrap data."
-    mv /tmp/bootstrap/{blocks,chainstate,evodb,llmq} ${CONFIG_DIR}/
-
-    rm -rf /tmp/bootstrap 2>/dev/null
-    echo "$(date -u)  Bootstrap complete."
-    sudo systemctl start raptoreum
+  function CheckBlockHeight () {
+    # Check local block height.
+    block_chain_info="$(ReadCli getblockchaininfo)"
+    if [[ "$block_chain_info" == "-1" ]]; then
+      log "$(date -u) daemon take too long to response to get blockchaininfo. it may be hanging."
+      tryToKillDaemonGracefullyFirst
+      return 1
+    elif [[ $block_chain_info == *"Could not connect to the server"* ]]; then
+      log "$(date -u) daemon may be down. getblockchaininfo error message: $block_chain_info"
+      return 1
+    else
+      block_height=$(echo $block_chain_info | jq -r ".blocks")
+      headers=$(echo $block_chain_info | jq -r ".blocks")
+      prev_height=$(ReadValue "/tmp/height")
+      prev_headers=$(ReadValue "/tmp/headers")
+      network_height=$(networkHeight)
+      echo "$block_height" > /tmp/height
+      echo "$headers" > /tmp/headers
+      log -n "$(date -u)  Node height (${block_height}/${network_height})."
+      if [[ $((network_height - block_height)) -gt 3 || "$network_height" == "-1" ]]; then
+        if (( block_height > prev_height )); then
+          log " Increased from ${prev_height} -> ${block_height}, headers from ${prev_headers} -> ${headers}. Node may be syncing so wait..."
+        elif (( block_height < prev_height )); then
+          log "It may just got rebootstrapping. wait"
+        elif [[ "$network_height" != "-1" ]]; then
+          if (( headers > prev_headers )); then
+            log "Node is syncing."
+            return 1;
+          fi
+          log "node may be stuck."
+          tryToKillDaemonGracefullyFirst
+          return 1
+        else
+          log "Daemon seem ok."
+        fi
+      else
+        log "Daemon seem ok."
+      fi
+    fi
+    return 0
   }
 
   # This should force unstuck the local node.
   function ReconsiderBlock () {
     # If raptoreum-cli is responsive and it is stuck in the different place than before.
-    if [[ $LOCAL_HEIGHT -gt 0 && $LOCAL_HEIGHT -gt $(ReadValue "/tmp/prev_stuck") ]]; then
+    if [[ $block_height -gt 0 && $block_height -gt $(ReadValue "/tmp/prev_stuck") ]]; then
       # Node is still responsive but is stuck on the wrong branch/fork.
-      RECONSIDER=$(( LOCAL_HEIGHT - 10 ))
+      RECONSIDER=$(( block_height - 10 ))
       HASH=$(ReadCli getblockhash ${RECONSIDER})
       if [[ ${HASH} != "-1" ]]; then
-        echo "$(date -u)  Reconsider chain from 10 blocks before current one ${RECONSIDER}."
+        log "$(date -u)  Reconsider chain from 10 blocks before current one ${RECONSIDER}."
         if [[ -z $(ReadCli reconsiderblock "${HASH}") ]]; then
           echo ${RECONSIDER} >/tmp/height
-          echo ${LOCAL_HEIGHT} >/tmp/prev_stuck
+          echo ${block_height} >/tmp/prev_stuck
           return 0
         fi
       fi
@@ -216,10 +203,5 @@
     # raptoreum-cli is/was unresponsive in at least 1 step
     return 1
   }
-
-  # Check pose score acording to the explorer data.
-  if [[ -z $PROTX_HASH ]]; then
-    CheckPoSe
-  fi
   # PoSe seems fine, did not change or was not able to get the score.
-  CheckBlockHeight || ReconsiderBlock || BootstrapChain
+  ( CheckBlockHeight && CheckPoSe ) || ReconsiderBlock
