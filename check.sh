@@ -1,45 +1,46 @@
 #!/bin/bash
-  # URLs for raptoreum explorers. Main and backup one.
-  URL=( 'https://explorer.raptoreum.com/' 'https://explorer.louhintamestarit.fi/' )
-  URL_ID=0
+# URLs for raptoreum explorers. Main and backup one.
+URL=( 'https://explorer.raptoreum.com/' 'https://explorer.louhintamestarit.fi/' )
+URL_ID=0
 
-  BOOTSTRAP_TAR=$BOOTSTRAP
-  HEALTH_LOG=/raptoreum/logs/healthcheck.log
+BOOTSTRAP_TAR=$BOOTSTRAP
+HEALTH_LOG=/raptoreum/logs/healthcheck.log
+CORE_DIR=/raptoreum/corefiles/
 
-  POSE_SCORE=0
-  PREV_SCORE=0
-  LOCAL_HEIGHT=0
-  # Variables provided by cron job enviroment variable.
-  # They should also be added into .bashrc for user use.
-  #RAPTOREUM_CLI    -> Path to the raptoreum-cli
-  #CONFIG_DIR/HOME  -> Path to "$HOME/.raptoreumcore/"
+POSE_SCORE=0
+PREV_SCORE=0
+LOCAL_HEIGHT=0
+# Variables provided by cron job enviroment variable.
+# They should also be added into .bashrc for user use.
+#RAPTOREUM_CLI    -> Path to the raptoreum-cli
+#CONFIG_DIR/HOME  -> Path to "$HOME/.raptoreumcore/"
 
-  # Add your NODE_PROTX here if you forgot or provided wrong hash during node
-  # installation.
-  #NODE_PROTX=
+# Add your NODE_PROTX here if you forgot or provided wrong hash during node
+# installation.
+#NODE_PROTX=
 
-  # Prepare some variables that can be set if the user is runing the script
-  # manually but are set in cron job enviroment.
-  if [[ -z $RAPTOREUM_CLI ]]; then
-    RAPTOREUM_CLI=$(which raptoreum-cli)
+# Prepare some variables that can be set if the user is runing the script
+# manually but are set in cron job enviroment.
+if [[ -z $RAPTOREUM_CLI ]]; then
+  RAPTOREUM_CLI=$(which raptoreum-cli)
+fi
+
+if [[ -z $CONFIG_DIR ]]; then
+  CONFIG_DIR="/raptoreum/.raptoreumcore/"
+fi
+
+function GetNumber () {
+  if [[ ${1} =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]; then
+    echo "${1}"
+  else
+    echo "-1"
   fi
+}
 
-  if [[ -z $CONFIG_DIR ]]; then
-    CONFIG_DIR="/raptoreum/.raptoreumcore/"
-  fi
-
-  function GetNumber () {
-    if [[ ${1} =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]; then
-      echo "${1}"
-    else
-      echo "-1"
-    fi
-  }
-
-  function log() {
-    echo $@
-    echo $@ >> $HEALTH_LOG
-  }
+function log() {
+  echo $@
+  echo $@ >> $HEALTH_LOG
+}
 
   function ReadValue () {
     GetNumber "$(cat ${1} 2>/dev/null)"
@@ -54,6 +55,7 @@
       sleep 1
       if ! ps --pid ${PID} 1>/dev/null; then
         # PID ended. Just exit the function.
+        #tail -n +2 output.txt
         return
       fi
     done
@@ -63,15 +65,23 @@
   }
 
   function forceKillWithCoreFile() {
-    CURRENT_DATE=`date +%s`
-    pkill -SIGABRT `cat raptoreumd.pid`
-    cp core /raptoreum/corefiles/core${CURRENT_DATE}
+    killall -q -s SIGABRT -r raptoreum
+    sleep 60s
+      # Check for any core files
+    CoreCount=$(find . -name core | wc -l)
+    if [ $CoreCount != 0 ] ; then
+       echo "Core file: ${CoreFile} - generating stacktrace"
+       CoreFile=$(find . -name core -print -quit)
+       CURRENT_DATE=`date +%s`
+       cp $CoreFile ${CORE_DIR}core_${CURRENT_DATE}
+    fi
+    killall -q -w -s 9 -r raptoreum
   }
 
   function tryToKillDaemonGracefullyFirst() {
     log "$(date -u)  Trying to kill daemon gracefully..."
-    pkill raptoreumd
-    sleep 90s
+    killall -r raptoreum
+    sleep 30s
     LOCAL_HEIGHT=$(GetNumber "$(ReadCli getblockcount)")
     if (( LOCAL_HEIGHT < 0 )); then
       log  "$(date -u)  Unable to kill daemon gracefully, force kill it..."
@@ -145,6 +155,11 @@
   function CheckBlockHeight () {
     # Check local block height.
     block_chain_info="$(ReadCli getblockchaininfo)"
+    if [[ $block_chain_info == *"HTTP error"* ]]; then
+      log "$(date -u) daemon return error ${blockchaininfo}. some raptoreum process maybe hanging"
+      killall -s 9 -r raptoreum
+      return 1
+    fi
     if [[ "$block_chain_info" == "-1" ]]; then
       log "$(date -u) daemon take too long to response to get blockchaininfo. it may be hanging."
       tryToKillDaemonGracefullyFirst

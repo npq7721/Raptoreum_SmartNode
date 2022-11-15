@@ -4,6 +4,7 @@ EXECUTABLE='raptoreumd'
 DIR='/raptoreum/.raptoreumcore'
 CONF_FILE='raptoreum.conf'
 FILE=$DIR/$CONF_FILE
+CORE_DIR=/raptoreum/corefiles/
 
 graceful_shutdown() {
   echo "Container is shutting down. gracefully shutting down raptoreum core daemon"
@@ -16,7 +17,7 @@ graceful_shutdown() {
      echo "Core file: ${CoreFile} - generating stacktrace"
      CoreFile=$(find . -name core -print -quit)
      CURRENT_DATE=`date +%s`
-     cp $CoreFile /raptoreum/corefiles/core_${CURRENT_DATE}
+     cp $CoreFile ${CORE_DIR}core_${CURRENT_DATE}
   else
     echo "raptoreum core shutdown successfully"
   fi

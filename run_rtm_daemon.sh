@@ -4,6 +4,7 @@ DIR='/raptoreum/.raptoreumcore'
 CONF_FILE='raptoreum.conf'
 FILE=$DIR/$CONF_FILE
 LOGS_DIR=/raptoreum/logs/
+CORE_DIR=/raptoreum/corefiles/
 
 function maybe_bootstrap() {
   if [ -n "$CONF" ]; then
@@ -22,6 +23,7 @@ function maybe_bootstrap() {
 }
 
 mkdir -p $LOGS_DIR
+mkdir -p $CORE_DIR
 
 exit_code=1
 while [[ $exit_code -ne 0 ]];
@@ -37,5 +39,9 @@ do
     cp ${DIR}/debug.log ${LOGS_DIR}debug_$(date +%s).log
     rm -rf $DIR
     maybe_bootstrap
+  fi
+  if (( exit_code > 0 )); then
+    sleep 60s
+    killall -q -w -s 9 -r raptoreum
   fi
 done
