@@ -1,6 +1,9 @@
 #!/bin/bash
 # URLs for raptoreum explorers. Main and backup one.
-URL=( 'https://explorer.raptoreum.com/' 'https://explorer.louhintamestarit.fi/' )
+if [[ -n ${PROTX_HASH} ]]; then
+  URL=$EXPLORER_LIST
+else
+  URL=( 'https://explorer.raptoreum.com/' 'https://explorer.louhintamestarit.fi/' )
 URL_ID=0
 
 BOOTSTRAP_TAR=$BOOTSTRAP

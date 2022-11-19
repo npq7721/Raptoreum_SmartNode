@@ -1,0 +1,39 @@
+version: '3.3'
+
+networks:
+  daemons:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.16.0.0/24
+
+services:
+  raptoreum:
+    image: npq7721/node-debug-1.3.17.99
+    container_name: test_raptoreum_node
+    ports:
+      - "10229:10229"
+    volumes:
+      - /home/tri/workspace/test/:/raptoreum
+    restart: unless-stopped
+    networks:
+      daemons:
+        ipv4_address: 172.16.0.2
+    environment:
+      #PROTX_HASH: e556520a1ba3658d39fbedd05087dbc99aa7797fe45703b7e16db06318c13701
+      #BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps_for_v1.3.17.00/bootstrap-index.tar.xz"
+      EXPLORER_LIST: ( 'https://explorer.raptoreum.com/' 'https://explorer.louhintamestarit.fi/' )
+      FORCE_BOOTSTRAP: "false"
+      CONF: |
+        rpcuser=rpcuser
+        rpcpassword=rpcpassword
+        rpcallowip=127.0.0.1
+        rpcbind=127.0.0.1
+        testnet=1
+        server=1
+        listen=1
+        txindex=1
+        addressindex=1
+        futureindex=1
+        spentindex=1
+        timestampindex=1
