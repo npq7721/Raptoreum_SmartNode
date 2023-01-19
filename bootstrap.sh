@@ -10,6 +10,10 @@ if [ ! -d $DIR ]; then
     wget -O bootstrap.tar.xz $BOOTSTRAP
     tar -xvf bootstrap.tar.xz
     rm bootstrap.tar.xz
+  elif [[ "$BOOTSTRAP" =~ (^.+)\.tar\.gz$ ]]; then
+        wget -O bootstrap.tar.gz $BOOTSTRAP
+        tar -xvf bootstrap.tar.gz
+        rm bootstrap.tar.gz
   elif [[ "$BOOTSTRAP" =~ (^.+)\.zip$ ]]; then
     wget -O bootstrap.zip $BOOTSTRAP
     unzip -q bootstrap.zip

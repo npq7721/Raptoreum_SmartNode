@@ -9,7 +9,7 @@ networks:
 
 services:
   raptoreum:
-    image: npq7721/raptoreum:1.3.17.0
+    image: npq7721/raptoreum:1.3.17.01
     container_name: index_raptoreum_node
     ports:
       - "10226:10226"

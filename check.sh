@@ -1,9 +1,10 @@
 #!/bin/bash
 # URLs for raptoreum explorers. Main and backup one.
-if [[ -n ${PROTX_HASH} ]]; then
+if [[ -n ${EXPLORER_LIST} ]]; then
   URL=$EXPLORER_LIST
 else
   URL=( 'https://explorer.raptoreum.com/' 'https://explorer.louhintamestarit.fi/' )
+fi
 URL_ID=0
 
 BOOTSTRAP_TAR=$BOOTSTRAP
@@ -221,5 +222,13 @@ function log() {
     # raptoreum-cli is/was unresponsive in at least 1 step
     return 1
   }
+
+  function skipHeathCheck() {
+    if [[ "$SKIP_HEALTH_CHECK" == "true" ]]; then
+      log "$(date -u)  skip healthcheck flag is on container consider healthy"
+      return 1
+    fi
+    return 0;
+  }
   # PoSe seems fine, did not change or was not able to get the score.
-  ( CheckBlockHeight && CheckPoSe ) || ReconsiderBlock
+  skipHeathCheck || ( CheckBlockHeight && CheckPoSe ) || ReconsiderBlock
