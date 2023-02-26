@@ -28,7 +28,8 @@ RUN cd raptoreum/depends && make -j10
 RUN cd raptoreum && \
     ./autogen.sh && \
     ./configure --prefix=`pwd`/depends/x86_64-pc-linux-gnu --disable-tests --without-gui && \
-    make -j10 && \
+    make -j$(nproc) && \
+    strip src/raptoreum-cli src/raptoreum-tx src/raptoreumd && \
     cp src/raptoreum-cli src/raptoreum-tx src/raptoreumd /usr/local/bin && \
     rm -rf *
 # Create dir to run datadir to bind for persistent data
