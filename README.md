@@ -42,7 +42,7 @@ services:
       - /root/docker-rtm/:/raptoreum #maping /root/docker-rtm from host machine to /raptoreum folder in docker container
     restart: unless-stopped
     environment:
-      BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps_for_v1.3.17.00/bootstrap.tar.xz" #normal bootstrap
+      BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps/bootstrap.tar.xz" #normal bootstrap
       FORCE_BOOTSTRAP: "false" # change to true if u want to redownload bootstrap
       CONF: | #this is raptoreum.conf
         rpcuser=rpcuser
@@ -76,7 +76,7 @@ services:
       - /root/docker-rtm/:/raptoreum #maping /root/docker-rtm from host machine to /raptoreum folder in docker container
     restart: unless-stopped
     environment:
-      BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps_for_v1.3.17.00/bootstrap.tar.xz" #normal bootstrap
+      BOOTSTRAP: "https://bootstrap.raptoreum.com/bootstraps/bootstrap.tar.xz" #normal bootstrap
       FORCE_BOOTSTRAP: "false" # change to true if u want to redownload bootstrap
       PROTX_HASH: #ur smartnode protx hash
       CONF: | #this is raptoreum.conf
